@@ -25,3 +25,9 @@ tb/   – Testbench
 1. Compile RTL and TB
 2. Run simulation
 3. View waveforms
+
+## Verification Highlights
+- Loopback testing (TX → RX)
+- Directed testcases
+- Timing and baud-rate verification
+- Waveform-based debug
