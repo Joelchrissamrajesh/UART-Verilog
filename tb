@@ -1,0 +1,68 @@
+`timescale 1ns/1ps
+module tb;
+
+reg clk, rst;
+reg [7:0] data_in;
+reg wr_en;
+reg rdy_clr;
+wire rdy;
+wire [7:0] data_out;
+wire busy;
+
+top dut (
+    .rst(rst),
+    .data_in(data_in),
+    .wr_en(wr_en),
+    .clk(clk),
+    .rdy_clr(rdy_clr),
+    .rdy(rdy),
+    .busy(busy),
+    .data_out(data_out)
+);
+
+always #5 clk = ~clk;
+
+initial begin
+    $dumpfile("uart.vcd");
+    $dumpvars(0, tb);
+end
+
+task send(input [7:0] din);
+begin
+
+    wait(!busy)
+    @(negedge clk);
+    data_in = din;
+    wr_en   = 1'b1;
+    @(negedge clk);
+    wr_en   = 1'b0;
+end
+endtask
+
+initial begin
+    clk = 0; 
+    rst = 1;
+    data_in = 0; 
+    wr_en = 0; 
+    rdy_clr = 0;
+
+    #50 rst = 0;
+
+    send(8'h41);
+    wait(rdy);
+    $display("Received = %h", data_out);
+    rdy_clr = 1;
+    #10 rdy_clr = 0;
+
+    send(8'h55);
+    wait(rdy);
+    $display("Received = %h", data_out);
+    rdy_clr = 1;
+    #10 rdy_clr = 0;
+
+    #5_000_000;
+    $finish;
+end
+
+endmodule
+
