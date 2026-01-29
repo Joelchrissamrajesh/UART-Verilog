@@ -1,25 +1,27 @@
 `timescale 1ns/1ps
 module tb;
 
-reg clk, rst;
-reg [7:0] data_in;
+reg clk;
+reg rst;
 reg wr_en;
 reg rdy_clr;
-wire rdy;
+reg [7:0] data_in;
 wire [7:0] data_out;
+wire rdy;
 wire busy;
 
 top dut (
-    .rst(rst),
-    .data_in(data_in),
-    .wr_en(wr_en),
     .clk(clk),
+    .rst(rst),
+    .wr_en(wr_en),
+    .data_in(data_in),
     .rdy_clr(rdy_clr),
     .rdy(rdy),
     .busy(busy),
     .data_out(data_out)
 );
 
+// Clock runs FOREVER
 always #5 clk = ~clk;
 
 initial begin
@@ -27,42 +29,47 @@ initial begin
     $dumpvars(0, tb);
 end
 
-task send(input [7:0] din);
+task send_byte(input [7:0] d);
 begin
-
-    wait(!busy)
+    wait(!busy);
     @(negedge clk);
-    data_in = din;
-    wr_en   = 1'b1;
+    data_in = d;
+    wr_en   = 1;
     @(negedge clk);
-    wr_en   = 1'b0;
+    wr_en   = 0;
 end
 endtask
 
 initial begin
-    clk = 0; 
+    clk = 0;
     rst = 1;
-    data_in = 0; 
-    wr_en = 0; 
+    wr_en = 0;
     rdy_clr = 0;
+    data_in = 0;
 
     #50 rst = 0;
 
-    send(8'h41);
+    send_byte(8'h41);
     wait(rdy);
     $display("Received = %h", data_out);
-    rdy_clr = 1;
-    #10 rdy_clr = 0;
+    rdy_clr = 1; #10 rdy_clr = 0;
 
-    send(8'h55);
+    send_byte(8'h55);
     wait(rdy);
     $display("Received = %h", data_out);
-    rdy_clr = 1;
-    #10 rdy_clr = 0;
+    rdy_clr = 1; #10 rdy_clr = 0;
+    
+  send_byte(8'h13);
+    wait(rdy);
+    $display("Received = %h", data_out);
+    rdy_clr = 1; #10 rdy_clr = 0;
 
-    #5_000_000;
+  send_byte(8'h07);
+    wait(rdy);
+    $display("Received = %h", data_out);
+    rdy_clr = 1; #10 rdy_clr = 0;
+    #5_000_000;   // long enough for UART
     $finish;
 end
 
 endmodule
-
