@@ -1,228 +1,245 @@
 /////////////////////////////////////Baud Rate Generator//////////////////////////////////////////
 `timescale 1ns/1ps
-module baud_rate_generator(input wire clock, reset ,output reg enb_tx,output reg enb_rx);
+module baud_rate_generator (
+    input  wire clock,
+    input  wire reset,
+    output reg  enb_tx,
+    output reg  enb_rx
+);
 
-parameter clk_freq = 100_000_000;     //100MHz
-parameter baud_rate = 1_000_000;
-localparam divisor_tx = clk_freq/baud_rate;     
-localparam divisor_rx = clk_freq/(16*baud_rate);
+parameter CLK_FREQ  = 100_000_000; // 100 MHz
+parameter BAUD_RATE = 1_000_000;
 
-reg [31:0] counter_tx;
-reg [31:0] counter_rx;
+localparam DIV_TX = CLK_FREQ / BAUD_RATE;
+  localparam DIV_RX = CLK_FREQ / (16 * BAUD_RATE);
 
-always@(posedge clock) 
-	begin
-		if(reset)
-	  		begin
-				counter_tx<=0;
-				enb_tx<=0;   
-			end
-		else if(counter_tx==divisor_tx-1)
-			begin
-				enb_tx<=1;
-				counter_tx<=0;
-			end
-		else
-			begin
-				counter_tx<=counter_tx+1'b1;
-				enb_tx<=0;
-			end
-	end
+reg [31:0] cnt_tx;
+reg [31:0] cnt_rx;
 
-always@(posedge clock) 
-	begin
-		if(reset)
-			begin
-				counter_rx<=0; 
-				enb_rx<=0;
-			end
-		else if(counter_rx==divisor_rx-1)
-			begin
-				enb_rx<=1;
-				counter_rx<=0;
-			end
-		else
-			begin
-				counter_rx<=counter_rx+1'b1;
-				enb_rx<=0;
-			end
-	end
-endmodule 
+always @(posedge clock) begin
+    if (reset) begin
+        cnt_tx <= 0;
+        enb_tx <= 0;
+    end else if (cnt_tx == DIV_TX-1) begin
+        cnt_tx <= 0;
+        enb_tx <= 1'b1;
+    end else begin
+        cnt_tx <= cnt_tx + 1;
+        enb_tx <= 1'b0;
+    end
+end
+
+always @(posedge clock) begin
+    if (reset) begin
+        cnt_rx <= 0;
+        enb_rx <= 0;
+    end else if (cnt_rx == DIV_RX-1) begin
+        cnt_rx <= 0;
+        enb_rx <= 1'b1;
+    end else begin
+        cnt_rx <= cnt_rx + 1;
+        enb_rx <= 1'b0;
+    end
+end
+
+endmodule
 
 ///////////////////////////////////////////Transmitter//////////////////////////////////////////
 `timescale 1ns/1ps
-module transmitter(input wire clk, wr_en, enb, rst, input wire [7:0] data_in, output reg tx, output tx_busy);
+module transmitter (
+    input  wire       clk,
+    input  wire       rst,
+    input  wire       wr_en,
+    input  wire       enb,
+    input  wire [7:0] data_in,
+    output reg        tx,
+    output wire       tx_busy
+);
 
-parameter state_idle = 2'b00;
-parameter state_start = 2'b01;
-parameter state_data = 2'b10;
-parameter state_stop = 2'b11;
-
-reg [7:0] data;
-reg [2:0] index;
+parameter IDLE  = 2'b00;
+parameter START = 2'b01;
+parameter DATA  = 2'b10;
+parameter STOP  = 2'b11;
+  
 reg [1:0] state;
+reg [2:0] bit_idx;
+reg [7:0] data;
 
-assign tx_busy=(state != state_idle);
+assign tx_busy = (state != IDLE);
 
-always@(posedge clk)
-	begin
-		if(rst)
-			begin
-				tx<=1'b1;
-				state<=state_idle;
-				index<=0;
-				data<=0;
-			end
-		else
-		begin
-		case(state)
-		state_idle : begin
-		tx<=1'b1;
-		if(wr_en)
-			begin
-				state<=state_start;
-				data<=data_in;
-				index<=1'b0;
-			end
-		end
+always @(posedge clk) begin
+    if (rst) begin
+        state   <= IDLE;
+        tx      <= 1'b1; // idle high
+        bit_idx <= 0;
+        data    <= 0;
+    end else begin
+        case (state)
 
-		
-		state_start : begin
-		if(enb)
-			begin
-				tx<=1'b0;
-				state<=state_data;
-			end
-		end
+        IDLE: begin
+            tx <= 1'b1;
+            if (wr_en) begin
+                data  <= data_in;
+                bit_idx <= 0;
+                state <= START;
+            end
+        end
 
-		state_data : begin
-		if(enb) begin
-			tx<=data[index];
-				if(index==3'd7)
-  					state<=state_stop;
-				else
-					index<=index+1'b1;
-			end
-		end
+        START: begin
+            if (enb) begin
+                tx <= 1'b0; // start bit
+                state <= DATA;
+            end
+        end
 
-		state_stop : begin
-			if(enb)
-				begin
-					tx<=1'b1;
-					state<=state_idle;
-				end
-		end
-		endcase
-	end
+        DATA: begin
+            if (enb) begin
+                tx <= data[bit_idx];
+                if (bit_idx == 3'd7)
+                    state <= STOP;
+                else
+                    bit_idx <= bit_idx + 1;
+            end
+        end
+
+        STOP: begin
+            if (enb) begin
+                tx <= 1'b1; // stop bit
+                state <= IDLE;
+            end
+        end
+
+        endcase
+    end
 end
 
 endmodule
 
 ////////////////////////////////////////////Receiver//////////////////////////////////////////////
 `timescale 1ns/1ps
-module receiver(input wire clk, rst, rx, rdy_clr, clk_en, output reg rdy, output reg [7:0] data_out);
+module receiver (
+    input  wire       clk,
+    input  wire       rst,
+    input  wire       rx,
+    input  wire       clk_en,   // 16x baud enable
+    input  wire       rdy_clr,
+    output reg        rdy,
+    output reg [7:0]  data_out
+);
 
-parameter state_idle = 2'b00;
-parameter state_start = 2'b01;
-parameter state_dataout = 2'b10;
-parameter state_stop=2'b11
+parameter IDLE  = 2'b00;
+parameter START = 2'b01;
+parameter DATA  = 2'b10;
+parameter STOP  = 2'b11;
 
-reg [3:0] sample;
-reg [2:0] index;
-reg [7:0] temp;
 reg [1:0] state;
+reg [3:0] sample;
+reg [2:0] bit_idx;
+reg [7:0] temp;
 
-always@(posedge clk)
-	if(rst)
-		begin
-			rdy<=0;
-			data_out<=0;
-			state<=state_start;
-			sample<=0;
-			index<=0;
-		end
-	else
-		begin
-		if(rdy_clr)
-			rdy<=0;
+always @(posedge clk) begin
+    if (rst) begin
+        state    <= IDLE;
+        sample   <= 0;
+        bit_idx  <= 0;
+        temp     <= 0;
+        data_out <= 0;
+        rdy      <= 0;
+    end else begin
 
-		if(clk_en)
-			begin
-				case(state)
-				state_idle : begin
-					sample<=0;
-					index<=0;
-					if(rx==0)
-						state<=state_start;
-				end
+        if (rdy_clr)
+            rdy <= 0;
 
-				state_start : begin
-					sample<=sample+1;
-				if(sample==7)
-					begin
-						state<=state_dataout;
-						sample<=0;
-					end
-				end
-				
-				state_dataout : begin
-				sample<=sample+1;
-				if(sample==15)
-					begin
-						temp[index]<=rx;
-						index<=index+1;
-					end
-				if(index==3'd7)
-					state<=state_stop;
-				end
-			
-				state_stop : begin
-				sample<=sample+1;
-				if(sample == 15)
-					begin
-						state<=state_idle;
-						data_out<=temp;
-						rdy<=1'b1;
-						sample<=0;
-					end
-				end
-				default : begin
-					state<=state_start;
-				end
-				endcase
-			end
-			end
+        if (clk_en) begin
+            case (state)
+
+            IDLE: begin
+                sample  <= 0;
+                bit_idx<= 0;
+                if (rx == 0)
+                    state <= START;
+            end
+
+            START: begin
+                sample <= sample + 1;
+                if (sample == 7) begin   // middle of start bit
+                    sample <= 0;
+                    state  <= DATA;
+                end
+            end
+
+            DATA: begin
+                sample <= sample + 1;
+                if (sample == 15) begin
+                    temp[bit_idx] <= rx;
+                    bit_idx <= bit_idx + 1;
+                    sample <= 0;
+                    if (bit_idx == 3'd7)
+                        state <= STOP;
+                end
+            end
+
+            STOP: begin
+                sample <= sample + 1;
+                if (sample == 15) begin
+                    data_out <= temp;
+                    rdy <= 1'b1;
+                    state <= IDLE;
+                    sample <= 0;
+                end
+            end
+
+            endcase
+        end
+    end
+end
+
 endmodule
 
 //////////////////////////////////////////////Top/////////////////////////////////////////////////
 
 `timescale 1ns/1ps
-module top(input wire rst, input[7:0] data_in, input wr_en, input clk, input rdy_clr, output rdy, busy, output [7:0] data_out);
+module top (
+    input  wire       clk,
+    input  wire       rst,
+    input  wire       wr_en,
+    input  wire [7:0] data_in,
+    input  wire       rdy_clr,
+    output wire       rdy,
+    output wire       busy,
+    output wire [7:0] data_out
+);
 
-wire rx_clk_en;
-wire tx_clk_en;
-wire tx_temp;
+wire tx_en;
+wire rx_en;
+wire tx_line;
 
-baud_rate_generator bg(.clock (clk),
-		       .reset (rst), 
-		       .enb_tx (tx_clk_en), 
-                       .enb_rx (rx_clk_en));
+baud_rate_generator brg (
+    .clock(clk),
+    .reset(rst),
+    .enb_tx(tx_en),
+    .enb_rx(rx_en)
+);
 
-transmitter tr(.clk (clk), 
-	       .wr_en (wr_en), 
-               .enb (tx_clk_en),
-	       .rst (rst), 
-               .data_in (data_in), 
-	       .tx (tx_temp), 
-	       .tx_busy (busy));
+transmitter txu (
+    .clk(clk),
+    .rst(rst),
+    .wr_en(wr_en),
+    .enb(tx_en),
+    .data_in(data_in),
+    .tx(tx_line),
+    .tx_busy(busy)
+);
 
-receiver rc (.clk (clk),
-	     .rst (rst),
-             .rx (tx_temp),
-             .rdy_clr (rdy_clr),
-             .clk_en (rx_clk_en),
-             .rdy (rdy),
-             .data_out(data_out));
+receiver rxu (
+    .clk(clk),
+    .rst(rst),
+    .rx(tx_line),
+    .clk_en(rx_en),
+    .rdy_clr(rdy_clr),
+    .rdy(rdy),
+    .data_out(data_out)
+);
 
 endmodule
 
