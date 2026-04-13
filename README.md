@@ -1,33 +1,23 @@
-# UART-Verilog
-UART transmitter and receiver design with verification
-
-# UART Design and Verification
+# UART Verilog Design
 
 ## Overview
-This project implements a UART transmitter and receiver in Verilog with configurable baud rate.
+This project implements a UART (Universal Asynchronous Receiver Transmitter) using Verilog. It includes transmitter and receiver modules for serial communication.
 
 ## Features
-- UART TX and RX RTL
-- 16x oversampling receiver
-- Loopback verification
-- Directed testbench
+- UART Transmitter (TX)
+- UART Receiver (RX)
+- Configurable baud rate
+- Serial data communication
 
-## Directory Structure
-rtl/  – UART RTL modules  
-tb/   – Testbench
+## Design
+- uart_tx.v → Transmitter
+- uart_rx.v → Receiver
+- uart_top.v → Top module
 
-## Tools Used
-- Verilog
-- QuestaSim / Icarus Verilog
-- GTKWave
+## Verification
+- Loopback test performed (TX connected to RX)
+- Data transmitted from TX is successfully received at RX
 
 ## How to Run
-1. Compile RTL and TB
-2. Run simulation
-3. View waveforms
-
-## Verification Highlights
-- Loopback testing (TX → RX)
-- Directed testcases
-- Timing and baud-rate verification
-- Waveform-based debug
+cd sim  
+make run
