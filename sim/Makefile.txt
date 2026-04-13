@@ -1,0 +1,18 @@
+# Simulator
+SIM = iverilog
+
+# Output file
+OUT = uart_sim
+
+# RTL and Testbench files
+RTL = ../rtl/*.v
+TB  = ../tb/*.v
+
+# Default target
+run:
+	$(SIM) -o $(OUT) $(RTL) $(TB)
+	vvp $(OUT)
+
+# Clean generated files
+clean:
+	rm -f $(OUT)
